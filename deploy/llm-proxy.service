@@ -1,0 +1,34 @@
+# /etc/systemd/system/llm-proxy.service
+#
+# Install:
+#   pip install .            (or: pip install -e .)
+#   cp deploy/llm-proxy.service /etc/systemd/system/
+#   cp config/production.yaml /etc/llm-proxy/prod.yaml
+#   systemctl daemon-reload
+#   systemctl enable --now llm-proxy
+#
+# Secrets are passed via environment; see /etc/systemd/system/llm-proxy.service.d/
+# or EnvironmentFile= below.
+
+[Unit]
+Description=llm-proxy - slot-aware reverse proxy for llama-server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=llmproxy
+Group=llmproxy
+# one secret per line, e.g. PROXY_API_KEY=sk-...
+EnvironmentFile=/etc/llm-proxy/env
+ExecStart=/usr/local/bin/llm-proxy --config /etc/llm-proxy/prod.yaml
+Restart=on-failure
+RestartSec=2
+# hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

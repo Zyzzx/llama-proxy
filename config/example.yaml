@@ -1,0 +1,56 @@
+# llm-proxy configuration — every key is optional except backends.
+# ${ENV_VAR} and ${ENV_VAR:-default} are expanded from the environment.
+
+server:
+  host: 0.0.0.0
+  port: 4000
+  log_level: info                 # debug | info | warning | error
+  request_timeout: 600            # seconds; max time for one proxied request
+  poll_interval: 1.0              # seconds between /metrics refreshes
+  poll_timeout: 2.0               # seconds; timeout for a single metrics fetch
+  stale_after: 3.0                # seconds; exclude backend older than this
+  access_log: true
+  merge_models: true              # /v1/models = union across backends
+  # Uncomment to require clients to send Authorization: Bearer <key>:
+  # api_keys:
+  #   - ${PROXY_API_KEY}
+
+routing:
+  # least_busy | round_robin | idle_aware
+  #   idle_aware: prefer the GPU that has been resting longest (a busy GPU
+  #               counts as idle=0), so traffic rotates across all backends
+  #               instead of hammering one.
+  strategy: idle_aware
+  full_policy: overflow           # overflow | wait | reject
+  wait_timeout: 10.0              # seconds (only used when full_policy: wait)
+  wait_poll_interval: 0.2
+
+backends:
+  # NOTE: url is the bare host:port — NO /v1 suffix. The proxy appends
+  # /v1/... to requests and polls /metrics at the backend root.
+  - name: gpu0
+    url: http://yl6800.local:8080
+    slots: 1                      # llama-server --parallel value
+    weight: 1.0
+    # api_key: ${LLAMA_API_KEY}   # sent to this backend as Bearer token
+
+  - name: gpu1
+    url: http://yl6800.local:8081
+    slots: 1                      # llama-server --parallel value
+    weight: 1.0
+
+  - name: gpu2
+    url: http://yl6800.local:8082
+    slots: 1                      # llama-server --parallel value
+    weight: 1.0
+    # enabled: false              # set false to take a backend out of rotation
+    
+  - name: gpu3
+    url: http://yl6800.local:8083
+    slots: 1                      # llama-server --parallel value
+    weight: 1.0    
+    
+  - name: gpu4
+    url: http://yl6800.local:8084
+    slots: 1                      # llama-server --parallel value
+    weight: 1.0    

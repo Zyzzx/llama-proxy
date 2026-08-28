@@ -1,0 +1,53 @@
+# Local development config: 5 llama-server instances on THIS machine
+# (loopback, 127.0.0.1:8080-8084). The proxy listens on 0.0.0.0:4000 so
+# other machines can send requests to it. No auth anywhere — if this box
+# is reachable by untrusted parties, add server.api_keys (and firewall it).
+#
+#   Run:    llm-proxy --config config/local.yaml
+#   Check:  llm-proxy --config config/local.yaml --check
+#
+# NOTE: backend `url` is the bare host:port — NO /v1 suffix. The proxy
+# appends /v1/... to requests and polls /metrics at the backend root.
+
+server:
+  host: 0.0.0.0                # all interfaces — other machines on the network can also reach the proxy
+  port: 4000
+  log_level: info              # set to debug for local debugging
+  request_timeout: 600         # seconds; max time for one proxied request
+  poll_interval: 1.0           # seconds between /metrics refreshes
+  poll_timeout: 2.0            # seconds; timeout for a single metrics fetch
+  stale_after: 3.0             # seconds; exclude a backend older than this
+  access_log: true
+  merge_models: true           # /v1/models = union across all 5 backends
+  # No api_keys: local-only, so clients don't need Authorization: Bearer <key>.
+
+routing:
+  strategy: idle_aware         # rotate across all 5 GPUs so they rest in turn
+  full_policy: overflow        # let llama.cpp queue; never 503 on load
+  wait_timeout: 10.0           # seconds (only used when full_policy: wait)
+
+backends:
+  - name: gpu0
+    url: http://127.0.0.1:8080
+    slots: 1                   # llama-server --parallel value
+    weight: 1.0
+
+  - name: gpu1
+    url: http://127.0.0.1:8081
+    slots: 1
+    weight: 1.0
+
+  - name: gpu2
+    url: http://127.0.0.1:8082
+    slots: 1
+    weight: 1.0
+
+  - name: gpu3
+    url: http://127.0.0.1:8083
+    slots: 1
+    weight: 1.0
+
+  - name: gpu4
+    url: http://127.0.0.1:8084
+    slots: 1
+    weight: 1.0

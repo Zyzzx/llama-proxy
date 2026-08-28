@@ -1,0 +1,36 @@
+# Production template for a 3-GPU setup on separate hosts.
+# Inject secrets via environment; never commit real keys.
+
+server:
+  host: 0.0.0.0
+  port: 4000
+  log_level: info
+  request_timeout: 600
+  poll_interval: 1.0
+  poll_timeout: 2.0
+  stale_after: 3.0
+  access_log: true
+  merge_models: true
+  api_keys:
+    - ${PROXY_API_KEY}            # required: clients must present this key
+
+routing:
+  strategy: least_busy
+  full_policy: overflow           # let llama.cpp queue; 503 only when stale
+
+backends:
+  - name: gpu-a
+    url: http://yl6800.local:8080/v1
+    slots: 1
+    api_key: ${LLAMA_API_KEY}     # llama-server --api-key value
+
+  - name: gpu-b
+    url: http://10.0.0.12:8080
+    slots: 4
+    api_key: ${LLAMA_API_KEY}
+
+  - name: gpu-c
+    url: http://10.0.0.13:8080
+    slots: 8
+    weight: 1.5
+    api_key: ${LLAMA_API_KEY}

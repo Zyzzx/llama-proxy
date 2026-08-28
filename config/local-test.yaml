@@ -1,0 +1,17 @@
+# Minimal local test config: no auth anywhere.
+# Point the backends at your real llama-server instances.
+
+server:
+  host: 127.0.0.1
+  port: 4000
+  log_level: info
+  poll_interval: 1.0
+
+backends:
+  - name: gpu0
+    url: http://127.0.0.1:8080
+    slots: 4
+
+  - name: gpu1
+    url: http://127.0.0.1:8081
+    slots: 4
