@@ -1,5 +1,5 @@
 """Unit tests for the /metrics parser (both llama.cpp metric families)."""
-from llm_proxy.state import _parse_busy_metrics
+from llm_proxy.state import _parse_busy_metrics_sync as _parse_busy_metrics
 
 NEW_SAMPLE = """# HELP llamacpp:prompt_tokens_total Number of prompt tokens processed
 # TYPE llamacpp:prompt_tokens_total counter

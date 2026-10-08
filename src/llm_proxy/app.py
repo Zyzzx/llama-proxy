@@ -7,7 +7,8 @@ the host/port, and that /v1/models is a merged union across backends when
 from __future__ import annotations
 
 import asyncio
-import json
+import ijson
+import apyio
 import logging
 import time
 import uuid
@@ -232,14 +233,14 @@ class ProxyApp:
         body = await request.body()
         # the OpenAI ``model`` field may pin the backend (exact id match);
         # only POST inference bodies carry it
-        model = self._extract_model(body) if request.method == "POST" else None
+        model = await self._extract_model(body) if request.method == "POST" else None
         state = await self._select(request, model=model)
         prefix = "v1/" if v1 else ""
         target = f"{state.url}/{prefix}{path}"
         headers = self._forward_headers(request, state)
         rid = request.state.rid
 
-        if request.method == "POST" and self._wants_stream(body):
+        if request.method == "POST" and await self._wants_stream(body):
             return await self._stream(rid, state, target, body, headers)
 
         # in_flight was reserved atomically inside router.pick()
@@ -322,20 +323,29 @@ class ProxyApp:
         return headers
 
     @staticmethod
-    def _wants_stream(body: bytes) -> bool:
+    async def _wants_stream(body: bytes) -> bool:
         """Detect streaming from the JSON body — how OpenAI-compatible
         clients actually signal it (more reliable than headers)."""
         if not body:
             return False
         try:
-            payload = json.loads(body)
-            return isinstance(payload, dict) and bool(payload.get("stream"))
-        except Exception:
+            payload_begin = None
+
+            # async progressive parsing to avoid parsing large payloads
+            async for i in ijson.parse_async(apyio.BytesIO(body)):
+                if i[0] == '' and i[2] is None:
+                    payload_begin = i[1]
+                    continue
+                if payload_begin == "start_map" and i[0] == "stream" and i[1] == "boolean":
+                    return bool(i[2])
+        except Exception as e:
+            logger.debug("Failed to parse streaming flag from body: %s", e)
             # not JSON we can parse; fall back to byte heuristic
             return b'"stream": true' in body or b'"stream":true' in body
+        return False
 
     @staticmethod
-    def _extract_model(body: bytes) -> Optional[str]:
+    async def _extract_model(body: bytes) -> Optional[str]:
         """Pull the OpenAI ``model`` field out of a POST body, or None.
 
         Used only for backend pinning (exact id match); the body is
@@ -344,14 +354,21 @@ class ProxyApp:
         if not body:
             return None
         try:
-            payload = json.loads(body)
-        except Exception:
+            payload_begin = None
+            model_name = None
+
+            # async progressive parsing to avoid parsing large payloads
+            async for i in ijson.parse_async(apyio.BytesIO(body)):
+                if not i[0] and i[2] is None:
+                    payload_begin = i[1]
+                    continue
+                if i[0] == 'model' and i[1] == "string" and payload_begin == "start_map":
+                    model_name = i[2]
+                    break
+        except Exception as e:
+            logger.debug("Failed to extract model from body: %s", e)
             return None
-        if isinstance(payload, dict):
-            m = payload.get("model")
-            if isinstance(m, str) and m:
-                return m
-        return None
+        return model_name
 
     # ------------------------------------------------------------------
     # model discovery

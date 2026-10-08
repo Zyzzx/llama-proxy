@@ -157,7 +157,7 @@ _BUSY_METRIC_NAMES = (
 )
 
 
-def _parse_busy_metrics(text: str) -> Optional[int]:
+def _parse_busy_metrics_sync(text: str) -> Optional[int]:
     """Extract the busy count from llama.cpp Prometheus text output.
 
     Busy = total pending work on the backend:
@@ -192,6 +192,10 @@ def _parse_busy_metrics(text: str) -> Optional[int]:
         return int(values["llama_slots_busy"])
     return None
 
+# async for parse_busy_metrics
+# loading json, parsing and iterating might run too long for the loop
+async def _parse_busy_metrics(text: str) -> Optional[int]:
+    return await asyncio.to_thread(_parse_busy_metrics_sync, text)
 
 class MetricsPoller:
     """Polls /metrics on every enabled backend every ``poll_interval`` s."""
@@ -236,8 +240,10 @@ class MetricsPoller:
                 r = await self.client.get(f"{state.url}/metrics", timeout=timeout)
                 if r.status_code != 200:
                     state.last_error = f"metrics HTTP {r.status_code}"
+                    if r.status_code == 501:
+                        logger.error("metrics poll failed for %s: HTTP %s -- %s", state.name, r.status_code, r.json().get("error", {}).get("message"))
                     return
-                busy = _parse_busy_metrics(r.text)
+                busy = await _parse_busy_metrics(r.text)
                 if busy is None:
                     state.last_error = (
                         "no recognized busy metric in /metrics "
